@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes achats</title>
+</head>
+<body>
+    <h1>Achats de {{ username }}</h1>
+    {% if purchases %}
+        <ul>
+        {% for item in purchases %}
+            <li>{{ item }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Aucun achat pour le moment.</p>
+    {% endif %}
+    <a href="{{ url_for('home', username=username) }}">Retour à l'accueil</a>
+</body>
+</html>
