@@ -5,7 +5,8 @@
     <title>Achat</title>
 </head>
 <body>
-    <h1>Bravo {{ username }}, vous avez acheté l’article {{ article.name }} !</h1>
-    <a href="{{ url_for('home', username=username) }}">Retour à la liste</a>
+    <!-- Confirmation d'achat, affiche la derniere commande -->
+    <h1>Bravo {{ username }}, achat enregistre pour {{ article.name }} !</h1>
+    <a href="{{ url_for('home') }}">Retour a la liste</a>
 </body>
 </html>
