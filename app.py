@@ -131,6 +131,8 @@ def check_user_credentials(username: str, password: str) -> bool:
 
 @app.route("/", methods=["GET", "POST"])
 def login():
+    success_username = request.args.get("registered")
+
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
         password = request.form.get("password", "")
@@ -138,9 +140,13 @@ def login():
         if check_user_credentials(username, password):
             return redirect(url_for("home", username=username))
         else:
-            return render_template("login.html", error="Identifiant ou mot de passe incorrect.")
+            return render_template(
+                "login.html",
+                error="Identifiant ou mot de passe incorrect.",
+                success_username=success_username,
+            )
 
-    return render_template("login.html")
+    return render_template("login.html", success_username=success_username)
 
 
 @app.route("/home")
@@ -173,6 +179,39 @@ def view_purchases():
     username = request.args.get("username", "")
     purchases = load_json("purchases.json").get(username, [])
     return render_template("purchases.html", username=username, purchases=purchases)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not username or not password:
+            return render_template(
+                "register.html",
+                error="Merci de remplir tous les champs.",
+                username=username,
+            )
+
+        if password != confirm_password:
+            return render_template(
+                "register.html",
+                error="Les mots de passe ne correspondent pas.",
+                username=username,
+            )
+
+        if create_user(username, password):
+            return redirect(url_for("login", registered=username))
+
+        return render_template(
+            "register.html",
+            error="Ce nom d'utilisateur est deja pris.",
+            username=username,
+        )
+
+    return render_template("register.html")
 
 
 if __name__ == "__main__":
