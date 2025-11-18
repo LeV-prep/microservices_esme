@@ -11,7 +11,7 @@ Application d'exemple composee de quatre services Flask independants relies par 
 | `orders_service` | 5003 | Catalogue et enregistrement des achats protege par JWT |
 | `api_gateway` (`app.py`) | 5000 | Front web + routes API, agit comme client OAuth2 |
 
-
+```
 MICROSERVICES/
 ├── auth_service/
 │   ├── app.py
@@ -31,7 +31,7 @@ MICROSERVICES/
 ├── purchases.json
 ├── users.db
 └── env/  (ton environnement virtuel)
-
+```
 
 ## Prerequis / Installation
 
