@@ -1,5 +1,7 @@
 import os
+import secrets
 from functools import wraps
+from urllib.parse import urlencode
 
 import requests
 from flask import (
@@ -13,13 +15,20 @@ from flask import (
 )
 
 # API Gateway: sert le front web, expose des routes publiques
-# et relaie tout vers les services internes après validation du JWT.
+# et relaie tout vers les services internes apres validation du JWT.
 app = Flask(__name__)
 app.secret_key = os.environ.get("GATEWAY_SECRET_KEY", "gateway-secret")
 
 AUTH_SERVICE_URL = os.environ.get("AUTH_SERVICE_URL", "http://127.0.0.1:5001")
 USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://127.0.0.1:5002")
 ORDERS_SERVICE_URL = os.environ.get("ORDERS_SERVICE_URL", "http://127.0.0.1:5003")
+
+# OAuth client configuration for the Authorization Code flow.
+OAUTH_CLIENT_ID = "gateway"
+OAUTH_CLIENT_SECRET = "dev-secret"
+AUTH_BASE_URL = "http://127.0.0.1:5001"
+REDIRECT_URI = "http://127.0.0.1:5000/oauth/callback"
+OAUTH_SCOPE = "basic"
 
 
 # ---------- HELPERS ----------
@@ -45,14 +54,14 @@ def validate_token(token: str):
 
 
 def login_required(view_func):
-    """Protège les routes HTML: session -> token -> validation côté auth service."""
+    """Protège les routes HTML: session -> token -> validation cote auth service."""
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        token = session.get("token")
+        token = session.get("access_token")
         username = validate_token(token)
         if not username:
-            session.clear()
-            return redirect(url_for("login"))
+            session.pop("access_token", None)
+            return redirect(url_for("start_oauth_login"))
         kwargs["current_user"] = username
         kwargs["token"] = token
         return view_func(*args, **kwargs)
@@ -61,7 +70,7 @@ def login_required(view_func):
 
 
 def fetch_articles(token: str):
-    """Récupère le catalogue via le service des commandes (JWT obligatoire)."""
+    """Recupere le catalogue via le service des commandes (JWT obligatoire)."""
     resp = call_service(
         "get",
         f"{ORDERS_SERVICE_URL}/orders/articles",
@@ -86,32 +95,65 @@ def fetch_purchases(username: str, token: str):
 
 # ---------- HTML ROUTES ----------
 
-@app.route("/", methods=["GET", "POST"])
-def login():
-    error = None
+@app.route("/", methods=["GET"])
+def index():
+    """Landing page affichant un bouton de connexion."""
     success_username = request.args.get("registered")
-    if request.method == "POST":
-        username = request.form.get("username", "").strip().lower()
-        password = request.form.get("password", "")
-        if not username or not password:
-            error = "Merci de remplir tous les champs."
-        else:
-            resp = call_service(
-                "post",
-                f"{AUTH_SERVICE_URL}/auth/login",
-                json={"username": username, "password": password},
-            )
-            if resp and resp.status_code == 200:
-                data = resp.json()
-                session["token"] = data.get("access_token")
-                session["username"] = data.get("username")
-                return redirect(url_for("home"))
-            error = "Identifiant ou mot de passe incorrect."
     return render_template(
         "login.html",
-        error=error,
+        error=None,
         success_username=success_username,
     )
+
+
+@app.route("/login")
+def start_oauth_login():
+    """Debut du flux Authorization Code : redirige l'utilisateur vers l'auth service."""
+    state = secrets.token_urlsafe(16)
+    session["oauth_state"] = state
+    params = {
+        "response_type": "code",
+        "client_id": OAUTH_CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": OAUTH_SCOPE,
+        "state": state,
+    }
+    authorize_url = f"{AUTH_BASE_URL}/oauth/authorize?{urlencode(params)}"
+    return redirect(authorize_url)
+
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    """Callback OAuth2 : verifie le state puis echange le code contre un JWT."""
+    error = request.args.get("error")
+    if error:
+        return redirect(url_for("index"))
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+    expected_state = session.get("oauth_state")
+    if not code or not state or state != expected_state:
+        return redirect(url_for("index"))
+    session.pop("oauth_state", None)
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": OAUTH_CLIENT_ID,
+        "client_secret": OAUTH_CLIENT_SECRET,
+    }
+    token_resp = call_service("post", f"{AUTH_BASE_URL}/oauth/token", data=data)
+    if token_resp is None or token_resp.status_code != 200:
+        return redirect(url_for("index"))
+
+    payload = token_resp.json()
+    access_token = payload.get("access_token")
+    if not access_token:
+        return redirect(url_for("index"))
+
+    session["access_token"] = access_token
+    return redirect(url_for("home"))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -137,7 +179,7 @@ def register():
             if resp is None:
                 error = "User service indisponible."
             elif resp.status_code == 201:
-                return redirect(url_for("login", registered=username))
+                return redirect(url_for("index", registered=username))
             elif resp.status_code == 409:
                 error = "Ce nom d'utilisateur est deja pris."
             else:
@@ -183,7 +225,7 @@ def view_purchases(current_user, token):
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("index"))
 
 
 # ---------- API ROUTES (Gateway) ----------
