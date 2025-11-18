@@ -33,6 +33,9 @@ MICROSERVICES/
 └── env/  (ton environnement virtuel)
 ```
 
+<img width="1165" height="846" alt="image" src="https://github.com/user-attachments/assets/35c7394f-d40c-4e2d-b785-fbac8c8de893" />
+
+
 ## Prerequis / Installation
 
 ```bash
