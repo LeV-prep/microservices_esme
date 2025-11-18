@@ -11,6 +11,28 @@ Application d'exemple composee de quatre services Flask independants relies par 
 | `orders_service` | 5003 | Catalogue et enregistrement des achats protege par JWT |
 | `api_gateway` (`app.py`) | 5000 | Front web + routes API, agit comme client OAuth2 |
 
+
+MICROSERVICES/
+├── auth_service/
+│   ├── app.py
+│   └── oauth.db
+├── orders_service/
+│   ├── app.py
+│   └── templates/
+│       ├── buy.html
+│       ├── home.html
+│       ├── login.html
+│       ├── purchases.html
+│       └── register.html
+├── user_service/
+│   ├── app.py
+│   └── .gitignore
+├── app.py
+├── purchases.json
+├── users.db
+└── env/  (ton environnement virtuel)
+
+
 ## Prerequis / Installation
 
 ```bash
@@ -72,3 +94,6 @@ La gateway est ensuite disponible sur http://127.0.0.1:5000/.
 - `purchases.json` : fichier JSON manipule par `orders_service`.
 
 Ces fichiers resident a la racine (ou dans `auth_service/`) afin d'etre accessibles aux differents services.
+
+
+
