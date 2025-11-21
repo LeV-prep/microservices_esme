@@ -6,13 +6,17 @@ from pathlib import Path
 import requests
 from flask import Flask, jsonify, request
 
-# Orders Service : cœur métier (catalogue + achats) protégé par vérification JWT.
+# Orders Service : coeur métier (catalogue + achats) protégé par des vérifications JWT.
+# Il ne sert aucune page HTML : toutes les interactions passent par les autres services.
 app = Flask(__name__)
 
+# Le fichier purchases.json est partagé entre services pour stocker un historique rudimentaire.
 BASE_DIR = Path(__file__).resolve().parent.parent
 PURCHASES_FILE = BASE_DIR / "purchases.json"
+# Adresse de l'auth service utilisée pour vérifier les tokens entrants.
 AUTH_SERVICE_URL = os.environ.get("AUTH_SERVICE_URL", "http://127.0.0.1:5001")
 
+# Catalogue minimal codé en dur pour la démo.
 ARTICLES = [
     {"id": 1, "name": "Article 1"},
     {"id": 2, "name": "Article 2"},
@@ -21,6 +25,7 @@ ARTICLES = [
 
 
 def load_purchases():
+    """Charge le fichier JSON des achats depuis le disque."""
     if not PURCHASES_FILE.exists():
         return {}
     with PURCHASES_FILE.open("r", encoding="utf-8") as f:
@@ -28,12 +33,13 @@ def load_purchases():
 
 
 def save_purchases(data):
+    """Sauvegarde l'état courant des achats (dictionnaire username -> liste)."""
     with PURCHASES_FILE.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
 
 def _validate_token(token: str):
-    """Relais côté auth service pour vérifier signature et expiration."""
+    """Demande à l'auth service de confirmer que le JWT est encore valable."""
     if not token:
         return None
     try:
@@ -50,7 +56,8 @@ def _validate_token(token: str):
 
 
 def token_required(view_func):
-    """Décorateur local : coupe court à toute requête sans JWT valide."""
+    """Décorateur : refuse toute requête sans Authorization: Bearer <JWT>."""
+
     @wraps(view_func)
     def wrapper(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
@@ -60,6 +67,7 @@ def token_required(view_func):
         username = _validate_token(parts[1].strip())
         if not username:
             return jsonify({"error": "Token invalide"}), 401
+        # On passe l'identité validée à la vue appelée afin de vérifier les autorisations.
         kwargs["current_user"] = username
         return view_func(*args, **kwargs)
 
@@ -69,14 +77,14 @@ def token_required(view_func):
 @app.route("/orders/articles", methods=["GET"])
 @token_required
 def list_articles(current_user):
-    """Renvoie le catalogue uniquement lorsqu'un token est fourni."""
+    """Retourne simplement le catalogue lorsque le JWT est valide."""
     return jsonify({"articles": ARTICLES})
 
 
 @app.route("/orders/<username>/purchases", methods=["GET"])
 @token_required
 def get_purchases(username, current_user):
-    """Empêche qu'un utilisateur puisse lire les achats d'un autre."""
+    """Autorise uniquement la lecture de ses propres achats."""
     if username != current_user:
         return jsonify({"error": "Acces interdit"}), 403
     purchases = load_purchases().get(username, [])
@@ -86,7 +94,7 @@ def get_purchases(username, current_user):
 @app.route("/orders/<username>/buy", methods=["POST"])
 @token_required
 def buy(username, current_user):
-    """Ajoute un achat à l'historique si le token correspond au chemin."""
+    """Ajoute un article à l'historique si le JWT appartient bien à l'utilisateur."""
     if username != current_user:
         return jsonify({"error": "Acces interdit"}), 403
     data = request.get_json(silent=True) or {}
@@ -103,11 +111,13 @@ def buy(username, current_user):
     purchases = load_purchases()
     purchases.setdefault(username, []).append(article["name"])
     save_purchases(purchases)
-    return jsonify({
-        "message": "Achat enregistre",
-        "article": article,
-        "user": username,
-    }), 201
+    return jsonify(
+        {
+            "message": "Achat enregistre",
+            "article": article,
+            "user": username,
+        }
+    ), 201
 
 
 if __name__ == "__main__":

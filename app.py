@@ -132,6 +132,8 @@ def oauth_callback():
     code = request.args.get("code")
     state = request.args.get("state")
     expected_state = session.get("oauth_state")
+    app.logger.debug("callback args: %s", dict(request.args))
+    app.logger.debug("state attendu: %s", expected_state)
     if not code or not state or state != expected_state:
         return redirect(url_for("index"))
     session.pop("oauth_state", None)
@@ -144,6 +146,18 @@ def oauth_callback():
         "client_secret": OAUTH_CLIENT_SECRET,
     }
     token_resp = call_service("post", f"{AUTH_BASE_URL}/oauth/token", data=data)
+    if token_resp is not None:
+        try:
+            resp_body = token_resp.json()
+        except ValueError:
+            resp_body = token_resp.text
+    else:
+        resp_body = None
+    app.logger.debug(
+        "token_resp status: %s body: %s",
+        token_resp.status_code if token_resp else None,
+        resp_body,
+    )
     if token_resp is None or token_resp.status_code != 200:
         return redirect(url_for("index"))
 
