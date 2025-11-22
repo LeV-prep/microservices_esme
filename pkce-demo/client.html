@@ -1,181 +1,145 @@
- <!--Résumé clair de ton code
-
-User tape username/password
-
-JS lit ces valeurs dans des variables
-
-JS génère PKCE (random → verifier → hash → challenge)
-
-JS stocke verifier dans sessionStorage
-
-JS affiche les valeurs dans <pre id="output"> -->
-
-
-
-
 <!DOCTYPE html>
 <html lang="fr">
 
- <!-- Partie non visible : meta, titre, style, etc -->
-<head>
+<head>                                                                                 <!-- Partie non visible -->
   <meta charset="UTF-8" />
+  <title>Client Page (PKCE)</title>                                                   <!-- Titre onglet navigateur -->
 
-  <title>Client Page (PKCE)</title>      <!-- Titre onglet navigateur -->
-  
-
-
-
-
-  <style>        /* DÉBUT DU CSS INTERNE (MISE EN FORME SIMPLE) */
-   
-    body { 
-      font-family: sans-serif;                                                    /* Police facile à lire */
-      margin: 30px;                                                               /* Espace autour du contenu */
+  <style>                                                                              /* CSS interne simple */
+    body {
+      font-family: sans-serif;                                                        /* Police simple */
+      margin: 30px;                                                                    /* Marge générale */
     }
 
-    input { 
-      display:block;                                                              /* Chaque input prend une ligne entière */
-      margin: 8px 0;                                                              /* Espace vertical entre inputs */
-      padding:6px;                                                                /* Un peu d’espace dans la case */
-      width: 250px;                                                               /* Largeur fixe */
+    input {
+      display: block;                                                                  /* Un input par ligne */
+      margin: 8px 0;                                                                   /* Espacement vertical */
+      padding: 6px;                                                                    /* Padding interne */
+      width: 250px;                                                                    /* Largeur fixe */
     }
 
-    pre { 
-      background:#f4f4f4;                                                        /* Fond gris clair */
-      padding:10px;                                                                /* Marge interne */
+    pre {
+      background: #f4f4f4;                                                             /* Fond gris clair */
+      padding: 10px;                                                                   /* Padding interne */
+      white-space: pre-wrap;                                                           /* Garde retours à la ligne */
     }
-
-  </style>        <!-- Fin du CSS -->
-  
+  </style>
 </head>
 
+<body>                                                                                <!-- Contenu visible -->
 
+  <h1>Page Client (simule Google)</h1>                                                <!-- Titre principal -->
 
+  <form id="loginForm">                                                               <!-- Formulaire login -->
+    <label>Username</label>                                                           <!-- Label username -->
+    <input id="username" required />                                                  <!-- Champ username -->
 
+    <label>Password</label>                                                           <!-- Label password -->
+    <input id="password" type="password" required />                                  <!-- Champ password masqué -->
 
-<!-- CONTENU VISIBLE -->
-<body>
+    <button type="submit">Login</button>                                              <!-- Bouton submit -->
+  </form>
 
-  <h1>Page Client (simule Google)</h1>                                          <!-- Titre principal -->
+  <h2>Résultat PKCE</h2>                                                              <!-- Titre section PKCE -->
+  <pre id="output">Rien pour l'instant.</pre>                                         <!-- Zone affichage principal -->
 
+  <h2>Timeline (étapes invisibles)</h2>                                               <!-- Titre timeline -->
+  <pre id="timeline"></pre>                                                           <!-- Zone logs étapes -->
 
-  <form id="loginForm">       <!-- Formulaire HTML -->
-    
-    <label>Username</label>                                                      <!--USERNAME -->
-    <input id="username" required />
-                                                                                                                            <!-- Champ texte pour username
-                                                                                                                            required = obligatoire -->
-    <label>Password</label>                                                      <!-- PASSWORD -->
-    <input id="password" type="password" required />
-                                                                                                                                <!-- Champ mot de passe masqué
-                                                                                                                                    required = obligatoire -->
-    <button type="submit">Login</button>                                         <!-- ENVOI du formulaire -->
-                                                                                                                                  <!-- Bouton qui déclenche l’envoi du formulaire -->
+  <script>                                                                            // Début JavaScript
 
-
-  </form>                     <!-- Fin du formulaire -->
- 
-
-
-
-
-
-
-  <h2>Résultat PKCE</h2>            <!-- Titre secondaire -->
-  
-
-  <pre id="output">Rien pour l'instant.</pre>
-                                                                <!-- Zone où on affichera code_verifier + code_challenge
-                                                                    pre = garde les retours à la ligne -->
-
-
-
-
-
-  <script>           // Début du JavaScript
-   
-
-    // --- Utils PKCE ---
-    // Fonctions utilitaires nécessaires pour PKCE
-
-    function base64urlencode(arrayBuffer) {                                                 // Transforme un ArrayBuffer (binaire) en Base64 "URL safe"
-      const bytes = new Uint8Array(arrayBuffer);                                         // Convertit l’ArrayBuffer en tableau d’octets                  
-      let binary = "";                                                                 // Chaîne vide pour accumuler les caractères 
-      bytes.forEach(b => binary += String.fromCharCode(b));                          // Convertit chaque octet en caractère et l’ajoute à la chaîne                                                       
-      return btoa(binary)                                                           // btoa() encode en base64 classique
-        .replace(/\+/g, "-")                                                              // Remplace + par -                           
-        .replace(/\//g, "_")                                                             // Remplace / par _
-        .replace(/=+$/, "");                                                               // Supprime les = à la fin
+    function logStep(msg, obj = null) {                                               // Fonction pour logger une étape
+      const t = document.getElementById("timeline");                                  // Récupère zone timeline
+      t.textContent += "\n\n▶ " + msg;                                                // Ajoute message
+      if (obj) t.textContent += "\n" + JSON.stringify(obj, null, 2);                  // Ajoute objet JSON si fourni
     }
 
-    function randomString(length = 64) {                                       // Génère une chaîne aléatoire sécurisée
-                                                                               // length = 64 par défaut
-      const array = new Uint8Array(length);                                   // Tableau de 64 octets
-      crypto.getRandomValues(array);                                          // Remplit ce tableau avec des valeurs aléatoires cryptographiques
-                                                                            // C’est le truc le plus sécurisé côté navigateur
-      return base64urlencode(array);                                          // Encode ces octets en Base64 URL safe → code_verifier
+    function base64urlencode(arrayBuffer) {                                           // Encode un buffer en Base64 URL-safe
+      const bytes = new Uint8Array(arrayBuffer);                                      // Convertit en tableau d’octets
+      let binary = "";                                                                // Chaîne temporaire
+      bytes.forEach(b => binary += String.fromCharCode(b));                           // Convertit octets en caractères
+      return btoa(binary)                                                             // Base64 classique
+        .replace(/\+/g, "-")                                                          // + -> -
+        .replace(/\//g, "_")                                                          // / -> _
+        .replace(/=+$/, "");                                                          // Supprime padding =
     }
 
-    async function sha256(plain) {                                        // Hash SHA-256 d’une chaîne "plain"
-      const encoder = new TextEncoder();                                     // Outil pour convertir une string en bytes
-      const data = encoder.encode(plain);                                        // Convertit plain en tableau de bytes
-      return await crypto.subtle.digest("SHA-256", data);                       // Applique SHA-256, retourne un ArrayBuffer
+    function randomString(length = 64) {                                              // Génère une string aléatoire sécurisée
+      const array = new Uint8Array(length);                                           // Tableau d’octets
+      crypto.getRandomValues(array);                                                  // Remplit de valeurs random crypto-safe
+      return base64urlencode(array);                                                  // Encode en Base64 URL-safe -> verifier
     }
 
-    async function generatePKCE() {     // Fonction principale PKCE
+    async function sha256(plain) {                                                    // SHA-256 d’une string
+      const encoder = new TextEncoder();                                              // Convertisseur string -> bytes
+      const data = encoder.encode(plain);                                             // Encode la string
+      return await crypto.subtle.digest("SHA-256", data);                             // Hash SHA-256 -> ArrayBuffer
+    }
 
-      const code_verifier = randomString(64);                                    // Génère un code verifier random
-      const hashed = await sha256(code_verifier);                                // Hash SHA-256 du verifier
-      const code_challenge = base64urlencode(hashed);                            // Encode le hash en Base64 URL safe
-     
+    async function generatePKCE() {                                                   // Génère verifier + challenge
+      const code_verifier = randomString(64);                                         // Verifier random
+      const hashed = await sha256(code_verifier);                                     // Hash du verifier
+      const code_challenge = base64urlencode(hashed);                                 // Challenge = base64url(hash)
+      return { code_verifier, code_challenge };                                       // Retourne les deux
+    }
 
-      return { code_verifier, code_challenge }; // Renvoie les deux valeurs
-                                                                     
-    }  
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {    // Event au clic Login
+      e.preventDefault();                                                             // Stop reload
 
+      const username = document.getElementById("username").value;                     // Lit username
+      const password = document.getElementById("password").value;                     // Lit password
 
+      logStep("Utilisateur a cliqué Login");                                          // Log étape
 
+      const { code_verifier, code_challenge } = await generatePKCE();                 // Génère PKCE
+      sessionStorage.setItem("code_verifier", code_verifier);                         // Stocke verifier localement
 
-    // --- Form handler ---
-    // Gestion du formulaire
+      logStep("PKCE généré ✅", { code_verifier, code_challenge });                   // Log PKCE
 
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {    // Quand on clique sur Login → déclenche cet event
-  e.preventDefault();                                                             // Empêche la page de se recharger automatiquement
+      let authzResponse = null;                                                       // Réponse AuthZ
 
-  const username = document.getElementById("username").value;                     // Récupère ce que l'utilisateur a tapé en username
-  const password = document.getElementById("password").value;                     // Récupère le password tapé
+      try {
+        const res = await fetch("http://localhost:5000/authorize", {                  // Envoie vers AuthZServer
+          method: "POST",                                                             // POST
+          headers: { "Content-Type": "application/json" },                            // JSON
+          body: JSON.stringify({ code_challenge })                                    // Payload challenge
+        });
 
-  const { code_verifier, code_challenge } = await generatePKCE();                 // Génère verifier + challenge (PKCE)
-  sessionStorage.setItem("code_verifier", code_verifier);                         // Stocke le verifier dans sessionStorage (temporaire)
-  console.log("verifier stocké =", sessionStorage.getItem("code_verifier"));      // Affiche dans la console du navigateur pour debug
+        authzResponse = await res.json();                                             // Parse JSON
+      } catch (err) {
+        authzResponse = { error: "fetch_failed", details: String(err) };              // Erreur fetch
+      }
 
-  let authzResponse = null;                                                       // Variable qui va contenir la réponse du serveur
+      logStep("Réponse /authorize reçue", authzResponse);                             // Log AuthZ réponse
 
-  try {
-    const res = await fetch("http://localhost:5000/authorize", {                  // Envoie une requête POST vers l'AuthZServer
-      method: "POST",                                                             // Méthode HTTP = POST
-      headers: { "Content-Type": "application/json" },                            // On précise que le corps de la requête est du JSON
-      body: JSON.stringify({ code_challenge })                                    // On envoie le challenge dans le body JSON
+      const access_token = authzResponse.access_token;                                // Récupère token
+
+      let profileResponse = null;                                                     // Réponse resource
+
+      try {
+        const profRes = await fetch("http://localhost:7000/profile", {                // Appel ResourceServer
+          method: "GET",                                                              // GET
+          headers: {                                                                  // Headers
+            "Authorization": "Bearer " + access_token                                 // Bearer token
+          }
+        });
+
+        profileResponse = await profRes.json();                                       // Parse JSON
+      } catch (err) {
+        profileResponse = { error: "fetch_failed", details: String(err) };            // Erreur fetch
+      }
+
+      logStep("Réponse /profile (Resource Server)", profileResponse);                 // Log Resource réponse
+
+      document.getElementById("output").textContent =                                 // Affiche tout dans output
+        "username: " + username + "\n" +                                              // Username
+        "password: " + "*".repeat(password.length) + "\n\n" +                         // Password masqué
+        "code_verifier:\n" + code_verifier + "\n\n" +                                 // Verifier
+        "code_challenge:\n" + code_challenge + "\n\n" +                               // Challenge
+        "Réponse AuthZServer:\n" + JSON.stringify(authzResponse, null, 2) + "\n\n" +  // Réponse AuthZ
+        "Réponse ResourceServer:\n" + JSON.stringify(profileResponse, null, 2);       // Réponse Resource
     });
 
-    authzResponse = await res.json();                                             // Convertit la réponse du serveur en JSON
-  } catch (err) {
-    authzResponse = { error: "fetch_failed", details: String(err) };             // Si problème (CORS, serveur off, etc.) → message d'erreur
-  }
-
-  document.getElementById("output").textContent =                                 // On écrit toute la sortie dans le <pre id="output">
-    "username: " + username + "\n" +                                               // Affiche le username
-    "password: " + "*".repeat(password.length) + "\n\n" +                          // Affiche des étoiles à la place du mot de passe
-    "code_verifier:\n" + code_verifier + "\n\n" +                                  // Affiche le verifier
-    "code_challenge:\n" + code_challenge + "\n\n" +                                // Affiche le challenge
-    "Réponse AuthZServer:\n" + JSON.stringify(authzResponse, null, 2);             // Affiche la réponse JSON du serveur (token ou erreur)
-});
-
-
   </script>
-  <!-- Fin du JavaScript -->
 </body>
-<!-- Fin body -->
-
 </html>
-<!-- Fin HTML -->
