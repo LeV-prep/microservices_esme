@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html lang="fr">
 
-<head>                                                                                 <!-- Partie non visible -->
+<head>
   <meta charset="UTF-8" />
-  <title>Client Page (PKCE)</title>                                                   <!-- Titre onglet -->
+  <title>Client Page (PKCE)</title>
 
   <style>
-    body { font-family: sans-serif; margin: 30px; }                                   /* Style simple */
-    input { display:block; margin:8px 0; padding:6px; width:250px; }                  /* Inputs */
-    pre { background:#f4f4f4; padding:10px; white-space:pre-wrap; }                  /* Zones logs */
+    body { font-family: sans-serif; margin: 30px; }
+    input { display:block; margin:8px 0; padding:6px; width:250px; }
+    pre { background:#f4f4f4; padding:10px; white-space:pre-wrap; }
   </style>
 </head>
 
 <body>
-  <h1>Page Client (simule Google)</h1>                                                <!-- Titre -->
 
-  <form id="loginForm">                                                               <!-- Form login -->
+  <h1>Page Client (simule Google)</h1>
+
+  <form id="loginForm">
     <label>Username</label>
     <input id="username" required />
+
     <label>Password</label>
     <input id="password" type="password" required />
+
     <button type="submit">Login</button>
   </form>
 
@@ -30,32 +33,32 @@
   <pre id="timeline"></pre>
 
   <script>
-    function logStep(msg, obj=null) {                                                 // Fonction de log visible
-      const t = document.getElementById("timeline");                                  // Zone timeline
-      t.textContent += "\n\n▶ " + msg;                                                // Ajoute un titre d'étape
-      if (obj) t.textContent += "\n" + JSON.stringify(obj, null, 2);                  // Ajoute un JSON si dispo
+    function logStep(msg, obj=null) {                                               // Log visuel des étapes
+      const t = document.getElementById("timeline");                                // Zone timeline
+      t.textContent += "\n\n- " + msg;                                              // Ajoute un message
+      if (obj) t.textContent += "\n" + JSON.stringify(obj, null, 2);                // Ajoute un JSON si besoin
     }
 
-    function base64urlencode(arrayBuffer) {                                           // Buffer -> Base64 URL safe
+    function base64urlencode(arrayBuffer) {                                         // Buffer -> Base64 URL safe
       const bytes = new Uint8Array(arrayBuffer);
       let binary = "";
       bytes.forEach(b => binary += String.fromCharCode(b));
       return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     }
 
-    function randomString(length = 64) {                                              // Génère string random sécurisée
+    function randomString(length = 64) {                                            // String random sécurisée
       const array = new Uint8Array(length);
       crypto.getRandomValues(array);
       return base64urlencode(array);
     }
 
-    async function sha256(plain) {                                                    // SHA-256 d'une string
+    async function sha256(plain) {                                                  // SHA-256 côté navigateur
       const encoder = new TextEncoder();
       const data = encoder.encode(plain);
       return await crypto.subtle.digest("SHA-256", data);
     }
 
-    async function generatePKCE() {                                                   // Génère verifier + challenge
+    async function generatePKCE() {                                                 // Génère verifier + challenge
       const code_verifier = randomString(64);
       const hashed = await sha256(code_verifier);
       const code_challenge = base64urlencode(hashed);
@@ -63,68 +66,96 @@
     }
 
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault();                                                             // Stop reload
+      e.preventDefault();
 
-      const username = document.getElementById("username").value;                     // Username
-      const password = document.getElementById("password").value;                     // Password
+      const username = document.getElementById("username").value;                   // Lecture username
+      const password = document.getElementById("password").value;                   // Lecture password
 
-      logStep("Utilisateur clique Login");                                            // Timeline
+      logStep("Utilisateur clique Login");                                          // Timeline
 
-      const { code_verifier, code_challenge } = await generatePKCE();                 // PKCE
-      sessionStorage.setItem("code_verifier", code_verifier);                         // Stock verifier
+      const { code_verifier, code_challenge } = await generatePKCE();               // PKCE
+      sessionStorage.setItem("code_verifier", code_verifier);                       // Stocke verifier localement
 
-      logStep("PKCE généré ✅", { code_verifier, code_challenge });                   // Timeline PKCE
+      logStep("PKCE généré", { code_verifier, code_challenge });                    // Timeline
 
-      let authzResponse = null;                                                       // Réponse AuthZ
+      // 1) Appel /authorize avec le challenge -> reçoit authorization_code
+      let authorizeResponse = null;
 
       try {
-        logStep("Envoi du challenge à /authorize");                                   // Timeline avant fetch
+        logStep("Envoi code_challenge vers /authorize");                            // Timeline
 
-        const res = await fetch("http://localhost:5000/authorize", {                  // Appel AuthZ
+        const res = await fetch("http://localhost:5000/authorize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code_challenge })
         });
 
-        authzResponse = await res.json();                                             // Parse JSON
-
+        authorizeResponse = await res.json();
       } catch (err) {
-        authzResponse = { error: "fetch_failed", details: String(err) };              // Erreur
+        authorizeResponse = { error: "fetch_failed", details: String(err) };
       }
 
-      logStep("Réponse /authorize reçue", authzResponse);                             // Timeline AuthZ
+      logStep("Réponse /authorize reçue", authorizeResponse);                       // Timeline
 
-      // 🔥 NOUVEAU : on lit le résumé auto-register renvoyé par AuthZ
-      logStep("AuthZ a auto-enregistré le token au Resource Server",                  // Timeline action invisible
-              authzResponse.resource_register);
+      const authorization_code = authorizeResponse.authorization_code;             // Code temporaire
+      const stored_verifier = sessionStorage.getItem("code_verifier");             // Relit verifier stocké
 
-      const access_token = authzResponse.access_token;                                // Token
-
-      let profileResponse = null;                                                     // Réponse Resource
+      // 2) Appel /token avec authorization_code + verifier -> reçoit access_token
+      let tokenResponse = null;
 
       try {
-        logStep("Appel /profile avec Bearer token");                                  // Timeline avant /profile
+        logStep("Envoi authorization_code + code_verifier vers /token");            // Timeline
 
-        const profRes = await fetch("http://localhost:7000/profile", {                // ResourceServer
+        const resToken = await fetch("http://localhost:5000/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            authorization_code,
+            code_verifier: stored_verifier
+          })
+        });
+
+        tokenResponse = await resToken.json();
+      } catch (err) {
+        tokenResponse = { error: "fetch_failed", details: String(err) };
+      }
+
+      logStep("Réponse /token reçue", tokenResponse);                               // Timeline
+
+      logStep("AuthZ a enregistré le token au Resource Server",
+              tokenResponse.resource_register);                                     // Timeline de l'étape invisible
+
+      const access_token = tokenResponse.access_token;                              // Token final
+
+      // 3) Appel Resource Server /profile avec Bearer token
+      let profileResponse = null;
+
+      try {
+        logStep("Appel /profile avec Bearer token");                                // Timeline
+
+        const profRes = await fetch("http://localhost:7000/profile", {
           method: "GET",
           headers: { "Authorization": "Bearer " + access_token }
         });
 
-        profileResponse = await profRes.json();                                       // Parse JSON
+        profileResponse = await profRes.json();
       } catch (err) {
-        profileResponse = { error: "fetch_failed", details: String(err) };            // Erreur
+        profileResponse = { error: "fetch_failed", details: String(err) };
       }
 
-      logStep("Réponse /profile (Resource Server)", profileResponse);                 // Timeline Resource
+      logStep("Réponse /profile reçue", profileResponse);                            // Timeline
 
+      // Affichage final
       document.getElementById("output").textContent =
         "username: " + username + "\n" +
         "password: " + "*".repeat(password.length) + "\n\n" +
         "code_verifier:\n" + code_verifier + "\n\n" +
         "code_challenge:\n" + code_challenge + "\n\n" +
-        "Réponse AuthZServer:\n" + JSON.stringify(authzResponse, null, 2) + "\n\n" +
-        "Réponse ResourceServer:\n" + JSON.stringify(profileResponse, null, 2);
+        "Réponse /authorize:\n" + JSON.stringify(authorizeResponse, null, 2) + "\n\n" +
+        "Réponse /token:\n" + JSON.stringify(tokenResponse, null, 2) + "\n\n" +
+        "Réponse /profile:\n" + JSON.stringify(profileResponse, null, 2);
     });
   </script>
+
 </body>
 </html>

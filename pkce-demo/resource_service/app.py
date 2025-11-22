@@ -1,45 +1,47 @@
-from flask import Flask, request, jsonify               # Flask + requêtes/réponses JSON
-from flask_cors import CORS                             # Autorise fetch depuis le navigateur
+from flask import Flask, request, jsonify               # Flask + JSON
+from flask_cors import CORS                             # CORS
 
-app = Flask(__name__)                                   # Crée l'app ResourceServer
-CORS(app)                                               # Active CORS (sinon fetch bloqué)
+app = Flask(__name__)
+CORS(app)
 
-VALID_TOKENS = set()                                    # Liste temporaire de tokens valides (simplifié)
+VALID_TOKENS = set()                                    # Tokens valides stockés en RAM
 
-@app.get("/profile")                                    # Route protégée
+@app.get("/")
+def home():
+    return "ResourceServer OK"
+
+@app.post("/register-token")
+def register_token():
+    data = request.get_json()
+    token = data.get("access_token")
+
+    if not token:
+        return jsonify({"error": "missing_access_token"}), 400
+
+    VALID_TOKENS.add(token)
+    return jsonify({"message": "token enregistré"})
+
+@app.get("/profile")
 def profile():
-    auth_header = request.headers.get("Authorization")  # Récupère header Authorization
+    auth_header = request.headers.get("Authorization")
 
-    if not auth_header:                                 # Si pas de header
-        return jsonify({"error": "missing_token"}), 401 # 401 = pas authentifié
+    if not auth_header:
+        return jsonify({"error": "missing_token"}), 401
 
-    if not auth_header.startswith("Bearer "):           # Si mauvais format
+    if not auth_header.startswith("Bearer "):
         return jsonify({"error": "invalid_format"}), 401
 
-    token = auth_header.split(" ")[1]                   # Extrait le token
+    token = auth_header.split(" ")[1]
 
-    if token not in VALID_TOKENS:                       # Si token inconnu
-        return jsonify({"error": "invalid_token"}), 403 # 403 = refuse accès
+    if token not in VALID_TOKENS:
+        return jsonify({"error": "invalid_token"}), 403
 
-    return jsonify({                                    # Token OK → renvoie données protégées
+    return jsonify({
         "username": "victor",
         "email": "victor@example.com",
         "role": "student",
         "status": "Authenticated with PKCE demo"
     })
 
-@app.get("/")                                           # Route simple pour tester si le serveur tourne
-def home():
-    return "ResourceServer OK ✅"
-
-@app.post("/register-token")                            # Route simple pour enregistrer un token (pour la démo)
-def register_token():
-    data = request.get_json()                           # Lit JSON reçu
-    token = data.get("access_token")                    # Récupère token
-    if token:                                           # Si token existe
-        VALID_TOKENS.add(token)                         # Ajoute à la liste
-        return jsonify({"message": "token enregistré ✅"})
-    return jsonify({"error": "missing_access_token"}), 400
-
 if __name__ == "__main__":
-    app.run(port=7000, debug=True)                      # Port safe (6000 est bloqué)
+    app.run(port=7000, debug=True)
