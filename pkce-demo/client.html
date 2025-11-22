@@ -3,143 +3,128 @@
 
 <head>                                                                                 <!-- Partie non visible -->
   <meta charset="UTF-8" />
-  <title>Client Page (PKCE)</title>                                                   <!-- Titre onglet navigateur -->
+  <title>Client Page (PKCE)</title>                                                   <!-- Titre onglet -->
 
-  <style>                                                                              /* CSS interne simple */
-    body {
-      font-family: sans-serif;                                                        /* Police simple */
-      margin: 30px;                                                                    /* Marge générale */
-    }
-
-    input {
-      display: block;                                                                  /* Un input par ligne */
-      margin: 8px 0;                                                                   /* Espacement vertical */
-      padding: 6px;                                                                    /* Padding interne */
-      width: 250px;                                                                    /* Largeur fixe */
-    }
-
-    pre {
-      background: #f4f4f4;                                                             /* Fond gris clair */
-      padding: 10px;                                                                   /* Padding interne */
-      white-space: pre-wrap;                                                           /* Garde retours à la ligne */
-    }
+  <style>
+    body { font-family: sans-serif; margin: 30px; }                                   /* Style simple */
+    input { display:block; margin:8px 0; padding:6px; width:250px; }                  /* Inputs */
+    pre { background:#f4f4f4; padding:10px; white-space:pre-wrap; }                  /* Zones logs */
   </style>
 </head>
 
-<body>                                                                                <!-- Contenu visible -->
+<body>
+  <h1>Page Client (simule Google)</h1>                                                <!-- Titre -->
 
-  <h1>Page Client (simule Google)</h1>                                                <!-- Titre principal -->
-
-  <form id="loginForm">                                                               <!-- Formulaire login -->
-    <label>Username</label>                                                           <!-- Label username -->
-    <input id="username" required />                                                  <!-- Champ username -->
-
-    <label>Password</label>                                                           <!-- Label password -->
-    <input id="password" type="password" required />                                  <!-- Champ password masqué -->
-
-    <button type="submit">Login</button>                                              <!-- Bouton submit -->
+  <form id="loginForm">                                                               <!-- Form login -->
+    <label>Username</label>
+    <input id="username" required />
+    <label>Password</label>
+    <input id="password" type="password" required />
+    <button type="submit">Login</button>
   </form>
 
-  <h2>Résultat PKCE</h2>                                                              <!-- Titre section PKCE -->
-  <pre id="output">Rien pour l'instant.</pre>                                         <!-- Zone affichage principal -->
+  <h2>Résultat PKCE</h2>
+  <pre id="output">Rien pour l'instant.</pre>
 
-  <h2>Timeline (étapes invisibles)</h2>                                               <!-- Titre timeline -->
-  <pre id="timeline"></pre>                                                           <!-- Zone logs étapes -->
+  <h2>Timeline (étapes invisibles)</h2>
+  <pre id="timeline"></pre>
 
-  <script>                                                                            // Début JavaScript
-
-    function logStep(msg, obj = null) {                                               // Fonction pour logger une étape
-      const t = document.getElementById("timeline");                                  // Récupère zone timeline
-      t.textContent += "\n\n▶ " + msg;                                                // Ajoute message
-      if (obj) t.textContent += "\n" + JSON.stringify(obj, null, 2);                  // Ajoute objet JSON si fourni
+  <script>
+    function logStep(msg, obj=null) {                                                 // Fonction de log visible
+      const t = document.getElementById("timeline");                                  // Zone timeline
+      t.textContent += "\n\n▶ " + msg;                                                // Ajoute un titre d'étape
+      if (obj) t.textContent += "\n" + JSON.stringify(obj, null, 2);                  // Ajoute un JSON si dispo
     }
 
-    function base64urlencode(arrayBuffer) {                                           // Encode un buffer en Base64 URL-safe
-      const bytes = new Uint8Array(arrayBuffer);                                      // Convertit en tableau d’octets
-      let binary = "";                                                                // Chaîne temporaire
-      bytes.forEach(b => binary += String.fromCharCode(b));                           // Convertit octets en caractères
-      return btoa(binary)                                                             // Base64 classique
-        .replace(/\+/g, "-")                                                          // + -> -
-        .replace(/\//g, "_")                                                          // / -> _
-        .replace(/=+$/, "");                                                          // Supprime padding =
+    function base64urlencode(arrayBuffer) {                                           // Buffer -> Base64 URL safe
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      bytes.forEach(b => binary += String.fromCharCode(b));
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     }
 
-    function randomString(length = 64) {                                              // Génère une string aléatoire sécurisée
-      const array = new Uint8Array(length);                                           // Tableau d’octets
-      crypto.getRandomValues(array);                                                  // Remplit de valeurs random crypto-safe
-      return base64urlencode(array);                                                  // Encode en Base64 URL-safe -> verifier
+    function randomString(length = 64) {                                              // Génère string random sécurisée
+      const array = new Uint8Array(length);
+      crypto.getRandomValues(array);
+      return base64urlencode(array);
     }
 
-    async function sha256(plain) {                                                    // SHA-256 d’une string
-      const encoder = new TextEncoder();                                              // Convertisseur string -> bytes
-      const data = encoder.encode(plain);                                             // Encode la string
-      return await crypto.subtle.digest("SHA-256", data);                             // Hash SHA-256 -> ArrayBuffer
+    async function sha256(plain) {                                                    // SHA-256 d'une string
+      const encoder = new TextEncoder();
+      const data = encoder.encode(plain);
+      return await crypto.subtle.digest("SHA-256", data);
     }
 
     async function generatePKCE() {                                                   // Génère verifier + challenge
-      const code_verifier = randomString(64);                                         // Verifier random
-      const hashed = await sha256(code_verifier);                                     // Hash du verifier
-      const code_challenge = base64urlencode(hashed);                                 // Challenge = base64url(hash)
-      return { code_verifier, code_challenge };                                       // Retourne les deux
+      const code_verifier = randomString(64);
+      const hashed = await sha256(code_verifier);
+      const code_challenge = base64urlencode(hashed);
+      return { code_verifier, code_challenge };
     }
 
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {    // Event au clic Login
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();                                                             // Stop reload
 
-      const username = document.getElementById("username").value;                     // Lit username
-      const password = document.getElementById("password").value;                     // Lit password
+      const username = document.getElementById("username").value;                     // Username
+      const password = document.getElementById("password").value;                     // Password
 
-      logStep("Utilisateur a cliqué Login");                                          // Log étape
+      logStep("Utilisateur clique Login");                                            // Timeline
 
-      const { code_verifier, code_challenge } = await generatePKCE();                 // Génère PKCE
-      sessionStorage.setItem("code_verifier", code_verifier);                         // Stocke verifier localement
+      const { code_verifier, code_challenge } = await generatePKCE();                 // PKCE
+      sessionStorage.setItem("code_verifier", code_verifier);                         // Stock verifier
 
-      logStep("PKCE généré ✅", { code_verifier, code_challenge });                   // Log PKCE
+      logStep("PKCE généré ✅", { code_verifier, code_challenge });                   // Timeline PKCE
 
       let authzResponse = null;                                                       // Réponse AuthZ
 
       try {
-        const res = await fetch("http://localhost:5000/authorize", {                  // Envoie vers AuthZServer
-          method: "POST",                                                             // POST
-          headers: { "Content-Type": "application/json" },                            // JSON
-          body: JSON.stringify({ code_challenge })                                    // Payload challenge
+        logStep("Envoi du challenge à /authorize");                                   // Timeline avant fetch
+
+        const res = await fetch("http://localhost:5000/authorize", {                  // Appel AuthZ
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code_challenge })
         });
 
         authzResponse = await res.json();                                             // Parse JSON
+
       } catch (err) {
-        authzResponse = { error: "fetch_failed", details: String(err) };              // Erreur fetch
+        authzResponse = { error: "fetch_failed", details: String(err) };              // Erreur
       }
 
-      logStep("Réponse /authorize reçue", authzResponse);                             // Log AuthZ réponse
+      logStep("Réponse /authorize reçue", authzResponse);                             // Timeline AuthZ
 
-      const access_token = authzResponse.access_token;                                // Récupère token
+      // 🔥 NOUVEAU : on lit le résumé auto-register renvoyé par AuthZ
+      logStep("AuthZ a auto-enregistré le token au Resource Server",                  // Timeline action invisible
+              authzResponse.resource_register);
 
-      let profileResponse = null;                                                     // Réponse resource
+      const access_token = authzResponse.access_token;                                // Token
+
+      let profileResponse = null;                                                     // Réponse Resource
 
       try {
-        const profRes = await fetch("http://localhost:7000/profile", {                // Appel ResourceServer
-          method: "GET",                                                              // GET
-          headers: {                                                                  // Headers
-            "Authorization": "Bearer " + access_token                                 // Bearer token
-          }
+        logStep("Appel /profile avec Bearer token");                                  // Timeline avant /profile
+
+        const profRes = await fetch("http://localhost:7000/profile", {                // ResourceServer
+          method: "GET",
+          headers: { "Authorization": "Bearer " + access_token }
         });
 
         profileResponse = await profRes.json();                                       // Parse JSON
       } catch (err) {
-        profileResponse = { error: "fetch_failed", details: String(err) };            // Erreur fetch
+        profileResponse = { error: "fetch_failed", details: String(err) };            // Erreur
       }
 
-      logStep("Réponse /profile (Resource Server)", profileResponse);                 // Log Resource réponse
+      logStep("Réponse /profile (Resource Server)", profileResponse);                 // Timeline Resource
 
-      document.getElementById("output").textContent =                                 // Affiche tout dans output
-        "username: " + username + "\n" +                                              // Username
-        "password: " + "*".repeat(password.length) + "\n\n" +                         // Password masqué
-        "code_verifier:\n" + code_verifier + "\n\n" +                                 // Verifier
-        "code_challenge:\n" + code_challenge + "\n\n" +                               // Challenge
-        "Réponse AuthZServer:\n" + JSON.stringify(authzResponse, null, 2) + "\n\n" +  // Réponse AuthZ
-        "Réponse ResourceServer:\n" + JSON.stringify(profileResponse, null, 2);       // Réponse Resource
+      document.getElementById("output").textContent =
+        "username: " + username + "\n" +
+        "password: " + "*".repeat(password.length) + "\n\n" +
+        "code_verifier:\n" + code_verifier + "\n\n" +
+        "code_challenge:\n" + code_challenge + "\n\n" +
+        "Réponse AuthZServer:\n" + JSON.stringify(authzResponse, null, 2) + "\n\n" +
+        "Réponse ResourceServer:\n" + JSON.stringify(profileResponse, null, 2);
     });
-
   </script>
 </body>
 </html>
