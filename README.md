@@ -51,7 +51,7 @@ http://localhost:7000
 
 ## 5. Lancer le front (User + Client)
 
-Ouvrir user.html avec Live Server.
+Ouvrir user.html avec Live Server par exemple, ou en double cliquant sur le fichier user.html.
 
 Flux complet :
 1. user.html → client.html
@@ -63,6 +63,8 @@ Flux complet :
 7. Enregistrement auto du token au ResourceServer
 8. Appel /profile avec Bearer token
 9. Réponse JSON protégée
+
+<img width="1144" height="665" alt="image" src="https://github.com/user-attachments/assets/93ac6c8d-a326-4816-a79f-ed979ae86e59" />
 
 ---
 
