@@ -94,6 +94,8 @@ Elles se lancent séparément dans ton navigateur.
 - accepte uniquement les tokens enregistrés
 - renvoie des informations utilisateur
 
+<img width="965" height="684" alt="image" src="https://github.com/user-attachments/assets/6a88a537-1d27-4f8c-a035-9bae2759fc8b" />
+
 ---
 
 ## 🧪 5. Tests rapides
