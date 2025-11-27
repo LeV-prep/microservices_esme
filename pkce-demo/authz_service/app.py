@@ -10,7 +10,7 @@ CORS(app)
 # Stockage temporaire : authorization_code -> code_challenge
 authorization_codes = {}                                              # Mémoire RAM
 
-RESOURCE_REGISTER_URL = "http://localhost:7000/register-token"        # ResourceServer
+RESOURCE_REGISTER_URL = "http://resource:7000/register-token"        # ResourceServer
 
 @app.get("/")
 def home():
@@ -94,4 +94,4 @@ def token():
     })
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(host="0.0.0.0",port=5000, debug=True)

@@ -1,0 +1,23 @@
+# Image de base Python légère
+FROM python:3.11-slim
+
+# Dossier de travail dans le conteneur
+WORKDIR /app
+
+# Copier les dépendances Python
+COPY requirements.txt .
+
+# Installer les dépendances
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier le code du microservice d'authz dans le conteneur
+COPY authz_service /app/authz_service
+
+# Se placer dans le dossier du service
+WORKDIR /app/authz_service
+
+# On suppose que l'app écoute sur le port 5000
+EXPOSE 5000
+
+# Commande lancée au démarrage du conteneur
+CMD ["python", "app.py"]

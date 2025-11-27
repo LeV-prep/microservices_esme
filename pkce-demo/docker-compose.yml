@@ -1,0 +1,31 @@
+version: '3.9'
+
+services:
+  authz:
+    build:
+      context: .
+      dockerfile: Dockerfile.authz
+    container_name: authz-service
+    ports:
+      - "5000:5000"   # host:container
+    environment:
+      - SERVICE_NAME=authz
+      - FLASK_ENV=development
+    networks:
+      - pkce-net
+
+  resource:
+    build:
+      context: .
+      dockerfile: Dockerfile.resource
+    container_name: resource-service
+    ports:
+      - "7000:7000"   # host:container
+    environment:
+      - SERVICE_NAME=resource
+    networks:
+      - pkce-net
+
+networks:
+  pkce-net:
+    driver: bridge
