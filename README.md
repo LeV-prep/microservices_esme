@@ -14,12 +14,13 @@ Ce TP s’inscrit dans la continuité du projet PKCE déjà développé dans `pk
 
 ## 1. Contenu du dossier
 
+```
 .
 ├── main.tf                 → définition Terraform de l’infrastructure Docker
 ├── .gitignore              → ignore les fichiers Terraform sensibles
 ├── terraform.tfstate*      → gérés automatiquement (ne pas modifier)
 └── pkce-demo/              → projet PKCE réalisé précédemment
-
+```
 ---
 
 ## 2. Objectif du TP
