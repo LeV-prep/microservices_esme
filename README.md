@@ -1,141 +1,225 @@
-# 🔐 PKCE OAuth2 Demo — Version Dockerisée (AuthZ + Resource)
+# PKCE Secure Shop – TP Démonstration
 
-Ce projet est une démonstration pédagogique du flux **OAuth2 Authorization Code Flow avec PKCE**, en version conteneurisée.  
-Il repose sur **deux microservices Flask** exécutés via **Docker** et **docker-compose**, ainsi que deux interfaces HTML jouant le rôle du “User” et du “Client”.
+Ce projet est une **démonstration pédagogique complète** d'un flux d’authentification **PKCE (Proof Key for Code Exchange)** combiné avec :
+- un **AuthZ Server** (serveur d’autorisation),
+- un **Resource Server** protégé par Bearer Token,
+- une **mini-boutique** avec produits, commandes et historique,
+- un **journal de sécurité détaillé**, visible dans le front.
 
-Ce README reprend la même structure que ton modèle afin que tu ne sois jamais perdu.s
-
----
-
-## 🚀 1. Architecture du Projet
-
-Le projet contient 4 composants :
-
-- **user.html** — Interface utilisateur (bouton “Se connecter”)
-- **client.html** — Interface Cliente (PKCE + timeline)
-- **authz_service** — Serveur d’autorisation (Flask, dans Docker)
-- **resource_service** — Serveur de ressources protégées (Flask, dans Docker)
-
-En plus :
-- **Dockerfile.authz** — Image du serveur AuthZ
-- **Dockerfile.resource** — Image du ResourceServer
-- **docker-compose.yml** — Orchestration des microservices
-- **requirements.txt** — Dépendances Python embarquées dans les images
+L’objectif est de comprendre **chaque étape de sécurité**, comment un token est généré, validé, utilisé, et comment il protège les ressources métier.
 
 ---
 
-## 🐳 2. Lancer les serveurs avec Docker
-
-Depuis la racine du dossier **pkce-demo**, lancer :
+# 🧩 1. Architecture générale
 
 ```
-docker-compose up --build
+pkce-demo
+│
+├── authz_service/         → Serveur d'autorisation (PKCE, tokens)
+│     └── app.py
+│
+├── resource_service/      → Serveur protégé (produits, commandes, logs)
+│     └── app.py
+│
+├── client.html            → Front principal PKCE + boutique
+├── user.html              → Page d’entrée (redirige vers client.html)
+├── Dockerfile.authz
+├── Dockerfile.resource
+├── docker-compose.yml
+└── requirements.txt
 ```
 
-Cela :
-1. construit les images des deux services  
-2. démarre les conteneurs  
-3. les connecte au réseau interne `pkce-net`  
-4. expose :
-   - AuthZ → http://localhost:5000
-   - Resource → http://localhost:7000
+---
 
-Endpoints disponibles via Docker :
+# 🔐 2. Le Flux PKCE en 5 étapes claires
 
-### 📌 AuthZServer (http://localhost:5000)
-- POST /authorize — reçoit `code_challenge`, génère `authorization_code`
-- POST /token — valide PKCE, génère l’`access_token`
-- GET / — health check (`AuthZServer OK`)
+1) **L’utilisateur clique “Login”** dans `client.html`.  
+2) Le navigateur génère :
+- un `code_verifier` (secret local)
+- un `code_challenge` (version hashée)
 
-### 📌 ResourceServer (http://localhost:7000)
-- POST /register-token — enregistre un token envoyé par AuthZ
-- GET /profile — ressource protégée (Authorization: Bearer <token>)
-- GET / — health check (`ResourceServer OK`)
+3) Le front appelle **/authorize** avec le `code_challenge`.  
+→ L’AuthZ renvoie un **authorization_code temporaire**.
+
+4) Le front appelle **/token** avec :
+- `authorization_code`
+- `code_verifier`
+
+→ L’AuthZ vérifie que `SHA256(verifier) == challenge`.  
+→ Si oui, il renvoie un **access_token**.
+
+5) Le front enregistre le token dans le Resource Server via **/register-token**.  
+À partir de ce moment, ce token est une “clé d’accès” à toutes les ressources protégées.
 
 ---
 
-## 🌐 3. Lancer le Client (HTML)
+# 🔒 3. Design Sécurité
 
-Les pages HTML ne sont **pas dans Docker**.  
-Elles se lancent séparément dans ton navigateur.
+### ✔ Separations :
+- **AuthZ Server** = validation du PKCE + génération des tokens  
+- **Resource Server** = protection des données + vérification du token
 
-1. Ouvrir **user.html** (Live Server recommandé)
-2. Cliquer “Se connecter”
-3. Redirection vers **client.html**
-4. Le client exécute :
-   - génération du code_verifier
-   - calcul du code_challenge
-   - envoi à `/authorize`
-   - récupération du `authorization_code`
-   - échange contre un `access_token`
-   - appel automatique de `/profile`
-   - affichage des étapes via la Timeline
+### ✔ Vérification du token :
+Tous les endpoints sensibles de Resource Server utilisent :
 
----
+```
+Authorization: Bearer <token>
+```
 
-## 🔑 4. PKCE Simplifié Implémenté
-
-### Côté Client (client.html) :
-- génération aléatoire du **code_verifier**
-- conversion via SHA256 + Base64URL → **code_challenge**
-- stockage temporaire dans `sessionStorage`
-- appel `POST /authorize`
-
-### Côté AuthZServer :
-- stockage du `code_challenge` lié au `authorization_code`
-- validation PKCE :
-  SHA256(verifier) == challenge
-- génération de l’`access_token`
-- enregistrement automatique du token dans ResourceServer
-- renvoi du token au Client
-
-### Côté ResourceServer :
-- protège l’accès à `/profile`
-- accepte uniquement les tokens enregistrés
-- renvoie des informations utilisateur
-
-<img width="965" height="684" alt="image" src="https://github.com/user-attachments/assets/6a88a537-1d27-4f8c-a035-9bae2759fc8b" />
+Le Resource Server :
+- vérifie le format
+- vérifie que le token est connu
+- logue chaque action dans `/security-log`
 
 ---
 
-## 🧪 5. Tests rapides
+# 🛍️ 4. Fonctionnalités de la boutique
 
-1. `docker-compose up --build`
-2. Aller sur http://localhost:5000 → “AuthZServer OK”
-3. Aller sur http://localhost:7000 → “ResourceServer OK”
-4. Ouvrir `user.html` → cliquer “Login”
-5. Attendre la Timeline
+Une base SQLite embarquée contient :
 
-Résultats attendus :
-- un authorization_code apparaît
-- un token est généré
-- `/register-token` est appelé automatiquement
-- `/profile` renvoie un JSON d’utilisateur
+### Table `products`
+| id | name | price | description |
+
+### Table `clients`
+| id | username |
+
+### Table `orders`
+| id | client_id | created_at |
+
+### Table `order_items`
+| id | order_id | product_id | quantity | unit_price |
+
+### Ressources protégées :
+
+#### ✔ GET `/products`
+Liste les produits.
+
+#### ✔ POST `/orders`
+Passe une commande.
+
+#### ✔ GET `/orders`
+Historique du client connecté.
+
+#### ✔ GET `/security-log`
+Retourne tout ce que l’utilisateur a fait :
+- token enregistré
+- accès à /profile
+- commandes créées
+- token OK / KO
+- etc.
 
 ---
 
-## 🛠 6. Étapes futures possibles
+# 🌐 5. Lancement du projet
 
-- passage au vrai protocole OAuth2 (auth_code + token_endpoint)
-- stockage redis/mongodb pour les tokens
-- signatures JWT (access tokens auto-validables)
-- séparation Front/Back plus poussée (React + API)
-- déploiement sur Kubernetes ou Terraform
+Dans **pkce-demo :**
 
----
+```
+docker compose up --build
+```
 
-## 🎯 7. Objectif pédagogique
-
-Ce projet permet de comprendre :
-- la séparation **User / Client / AuthZ / Resource**
-- le rôle du **code_verifier** et du **code_challenge**
-- comment PKCE sécurise OAuth2
-- comment un frontend HTML communique avec des microservices
-- comment dockeriser proprement deux serveurs Flask
-- comment utiliser `docker-compose` pour orchestrer des microservices
+- AuthZ via : `http://localhost:5000`
+- Resource Server via : `http://localhost:7000`
 
 ---
 
-## 📄 Licence
+# 💻 6. Utilisation du front (`client.html`)
 
-MIT — Projet éducatif et démonstration pédagogique.
+1) Ouvrir `client.html` dans le navigateur  
+2) Entrer username + password (n’importe lesquels pour la démo)  
+3) Le front :
+- effectue tout le flux PKCE,
+- affiche la timeline technique,
+- stocke automatiquement le token obtenu.
+
+4) Une fois connecté :
+- **Charger produits**
+- **Passer commande**
+- **Voir l’historique**
+- **Voir le journal de sécurité**
+
+Tout se fait via des appels sécurisés `Bearer <token>`.
+
+---
+
+# 📡 7. Endpoints importants (résumé)
+
+## AuthZ Server (port 5000)
+- `POST /authorize` → renvoie authorization_code
+- `POST /token` → renvoie access_token
+
+## Resource Server (port 7000)
+- `POST /register-token` → enregistre le token
+- `GET /profile` → ressource protégée (exemple)
+- `GET /products` → liste des produits
+- `POST /orders` → créer une commande
+- `GET /orders` → historique
+- `GET /security-log` → journal complet
+
+---
+
+# 📝 8. Journal de sécurité (explication pédagogique)
+
+Chaque action réalisée par l’utilisateur est enregistrée :
+
+Exemples :
+
+```
+{
+  "event": "register_token_ok",
+  "details": { "token": "<...>" }
+}
+
+{
+  "event": "token_ok",
+  "details": { "route": "/orders" }
+}
+
+{
+  "event": "order_created",
+  "details": { "order_id": 3 }
+}
+```
+
+Tu peux montrer :
+- quand un token est reçu
+- quand un token est validé
+- quand une ressource est accédée
+- quand une commande est passée
+
+Ce journal est **la preuve vivante** que PKCE + Bearer token fonctionnent.
+
+---
+
+# 🎯 9. Objectif pédagogique du TP
+
+Ce TP montre :
+
+- comment fonctionne le **PKCE** (verifier + challenge)
+- comment un **token** est obtenu puis utilisé
+- comment séparer les rôles entre **AuthZ** et **Resource Server**
+- comment protéger des ressources réelles (produits + commandes)
+- comment tracer toute la vie d’une requête côté sécurité
+- comment intégrer un front unique centralisant :
+  - le login
+  - la boutique
+  - l’historique
+  - la visibilité sécurité
+
+C’est une **démonstration complète d’un micro-système sécurisé moderne**, accessible et parfaitement adaptée à un rendu académique.
+
+---
+
+# 🏁 10. Pour aller plus loin (idées)
+
+- Ajouter expiration des tokens  
+- Utiliser JWT au lieu de tokens en RAM  
+- Ajouter un role admin  
+- Ajouter une page template Flask (optionnel)  
+- Brancher un vrai SGBD (PostgreSQL)  
+- Simuler un vrai provider OAuth2 (Google-like)
+
+---
+
+Projet réalisé dans un cadre pédagogique pour comprendre
+**la sécurité d’API moderne, OAuth2 et PKCE**.

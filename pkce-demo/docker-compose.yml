@@ -29,6 +29,3 @@ services:
 networks:
   pkce-net:
     driver: bridge
-
-volumes:
-  - ./resource_service/db.sqlite:/app/resource_service/db.sqlite
